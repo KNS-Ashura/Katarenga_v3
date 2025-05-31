@@ -115,6 +115,7 @@ class GameSession:
                 )
             
             if winner:
+                print("verif 3")
                 self._end_game(winner)
             
             return True
@@ -243,7 +244,10 @@ class GameSession:
         
         if self.on_game_end:
             self.on_game_end(winner)
+            print("verif 4")
             WinScreen(f"Player {winner}")
+        
+        print("verif 5")
     
     def send_chat_message(self, text):
         message = {
@@ -283,6 +287,9 @@ class GameSession:
         if self.on_game_end:
             self.on_game_end(winner)
             WinScreen(f"Player {winner}")
+            print("verif 6")
+        
+        print("verif 7")
     
     def _basic_validate_move(self, from_pos, to_pos):#get move validation in message when NetworkGameLogic is not working correctly
         if not self.moves_rules or not self.board:
