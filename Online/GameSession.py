@@ -110,8 +110,6 @@ class GameSession:
             winner = self.game_logic.check_victory(self.board, self.game_type, self.current_player)
             if winner:
                 print(f"[DEBUG] Victory detected for Player {winner}")
-                # Afficher WinScreen("Player 1") quel que soit le gagnant
-                self.close_all_and_show_win_screen("Player 1")
                 self._end_game(winner)
             else:
                 self._switch_player()
@@ -160,6 +158,7 @@ class GameSession:
                 print(f"[DEBUG] Applying opponent move: {from_pos} -> {to_pos}")
 
                 self._apply_move(from_pos, to_pos)
+
                 winner = None
                 if self.game_logic:
                     winner = self.game_logic.check_victory(
@@ -167,8 +166,7 @@ class GameSession:
                     )
                 if winner:
                     print(f"[DEBUG] Opponent triggered victory: Player {winner}")
-                    # Afficher WinScreen("Player 1") quel que soit le gagnant
-                    self.close_all_and_show_win_screen("Player 1")
+                    # Appeler _end_game pour que WinScreen soit affiché aussi côté client
                     self._end_game(winner)
                 else:
                     self._switch_player()
@@ -244,6 +242,26 @@ class GameSession:
             self.on_game_end(winner)
         else:
             print("[DEBUG] No on_game_end callback defined")
+
+        # Affiche la WinScreen quel que soit le joueur
+        self.close_all_and_show_win_screen(f"Player {winner}")
+    
+    def _end_game_received(self, winner):
+        print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
+        self.game_finished = True
+
+        if self.on_game_end:
+            print("[DEBUG] Calling on_game_end callback from _end_game_received")
+            self.on_game_end(winner)
+        else:
+            print("[DEBUG] No on_game_end callback defined in _end_game_received")
+
+        # Affiche WinScreen côté client à la réception de GAME_END
+        self.close_all_and_show_win_screen(f"Player {winner}")
+    
+    def close_all_and_show_win_screen(self, winner):
+        print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
+        WinScreen(winner)
     
     def send_chat_message(self, text):
         message = {
@@ -276,25 +294,7 @@ class GameSession:
             )
         return []
     
-    def _end_game_received(self, winner):
-        print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
-        self.game_finished = True
-
-        # Toujours afficher WinScreen("Player 1") à la fin de la partie
-        self.close_all_and_show_win_screen("Player 1")
-
-        if self.on_game_end:
-            print("[DEBUG] Calling on_game_end callback from _end_game_received")
-            self.on_game_end(winner)
-        else:
-            print("[DEBUG] No on_game_end callback defined in _end_game_received")
-
-    def close_all_and_show_win_screen(self, winner):
-        print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
-        WinScreen(winner)
-    
-    def _basic_validate_move(self, from_pos, to_pos):
-        # get move validation in message when NetworkGameLogic is not working correctly
+    def _basic_validate_move(self, from_pos, to_pos): # get move validation if NetworkGameLogic not available
         if not self.moves_rules or not self.board:
             return False
         
@@ -312,6 +312,3 @@ class GameSession:
             if not (0 <= from_row < len(self.board) and 0 <= from_col < len(self.board[0])):
                 return False
             case_color = self.board[from_row][from_col]
-            if case_color % 10 != self.current_player:
-                return False
-            return self.moves_rules.verify_move(case_color, from_row, from_col, to_row, to_col)
