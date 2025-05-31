@@ -82,48 +82,43 @@ class GameSession:
     
     def make_move(self, from_pos, to_pos):
         if not self.game_started or self.game_finished:
+            print("[DEBUG] Move rejected: game not started or already finished.")
             return False
-        
-        # Check if it's the player's turn
+
         local_player = 1 if self.is_host else 2
         if self.current_player != local_player:
-            print("It's not your turn")
+            print("[DEBUG] Not your turn.")
             return False
-        
-        # Validate and apply move using game logic
+
+        print(f"[DEBUG] Attempting move: {from_pos} -> {to_pos} by Player {self.current_player}")
+
         if self.game_logic and self.game_logic.validate_move(
-            self.board, self.moves_rules, self.game_type, 
+            self.board, self.moves_rules, self.game_type,
             self.current_player, from_pos, to_pos
         ):
             self._apply_move(from_pos, to_pos)
-            
-            # Send move to opponent
+
             message = {
                 'type': 'MOVE',
                 'from': from_pos,
                 'to': to_pos,
                 'player': self.current_player
             }
+            print(f"[DEBUG] Sending MOVE to opponent: {message}")
             self.network.send_message(json.dumps(message))
-            
-            self._switch_player()
-            
-            winner = None
-            if self.game_logic:
-                winner = self.game_logic.check_victory(
-                    self.board, self.game_type, self.current_player
-                )
-            
+
+            winner = self.game_logic.check_victory(self.board, self.game_type, self.current_player)
             if winner:
-                print("verif 3")
+                print(f"[DEBUG] Victory detected for Player {winner}")
                 self._end_game(winner)
-            
+            else:
+                self._switch_player()
+
             return True
-        
-        # Fallback validation if NetworkGameLogic not working correctly
+
         elif not self.game_logic and self._basic_validate_move(from_pos, to_pos):
             self._apply_move(from_pos, to_pos)
-            
+
             message = {
                 'type': 'MOVE',
                 'from': from_pos,
@@ -131,59 +126,56 @@ class GameSession:
                 'player': self.current_player
             }
             self.network.send_message(json.dumps(message))
-            
             self._switch_player()
             return True
-        
+
+        print("[DEBUG] Invalid move.")
         return False
     
     def _handle_network_message(self, message):
         try:
             data = json.loads(message)
             msg_type = data.get('type')
-            
+            print(f"[DEBUG] Received message: {msg_type} | Data: {data}")
+
             if msg_type == 'BOARD_DATA':
                 self.board = data['board']
                 self.game_type = data['game_type']
-                # Initialize rules with received board
                 self.moves_rules = Moves_rules(self.board)
                 if self.on_board_update:
                     self.on_board_update(self.board)
-            
+
             elif msg_type == 'GAME_START':
                 self.game_started = True
                 self.current_player = data['current_player']
                 if self.on_player_change:
                     self.on_player_change(self.current_player)
-            
+
             elif msg_type == 'MOVE':
                 from_pos = tuple(data['from']) if data['from'] else None
                 to_pos = tuple(data['to'])
                 player = data['player']
-                
-                # Apply opponent's move WITHOUT switching player first
+                print(f"[DEBUG] Applying opponent move: {from_pos} -> {to_pos}")
+
                 self._apply_move(from_pos, to_pos)
-                
-                # NOW switch player
-                self._switch_player()
-                
                 winner = None
                 if self.game_logic:
                     winner = self.game_logic.check_victory(
                         self.board, self.game_type, self.current_player
                     )
                 if winner:
+                    print(f"[DEBUG] Opponent triggered victory: Player {winner}")
                     self._end_game(winner)
-            
+                else:
+                    self._switch_player()
+
             elif msg_type == 'GAME_END':
                 winner = data['winner']
+                print(f"[DEBUG] GAME_END received from opponent - Winner: Player {winner}")
                 self._end_game_received(winner)
-            
-            elif msg_type == 'CHAT':
-                message_text = data['message']
-        
+
         except Exception as e:
-            print(f" Error processing message: {e}")
+            print(f"[ERROR] Error processing message: {e}")
     
     def _handle_disconnect(self):
         if not self.game_finished:
@@ -233,21 +225,24 @@ class GameSession:
             self.on_player_change(self.current_player)
     
     def _end_game(self, winner):
+        print(f"[DEBUG] _end_game called - Winner: Player {winner}")
         self.game_finished = True
-        
-        # Send game end message to opponent (both host and client)
+
         message = {
             'type': 'GAME_END',
             'winner': winner
         }
+        print("[DEBUG] Sending GAME_END message to opponent")
         self.network.send_message(json.dumps(message))
-        
+
         if self.on_game_end:
+            print("[DEBUG] Calling on_game_end callback")
             self.on_game_end(winner)
-            print("verif 4")
-            WinScreen(f"Player {winner}")
-        
-        print("verif 5")
+        else:
+            print("[DEBUG] No on_game_end callback defined")
+
+        print("[DEBUG] Calling WinScreen")
+        WinScreen(f"Player {winner}")
     
     def send_chat_message(self, text):
         message = {
@@ -281,15 +276,16 @@ class GameSession:
         return []
     
     def _end_game_received(self, winner):
-        
+        print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
         self.game_finished = True
-        
+
         if self.on_game_end:
+            print("[DEBUG] Calling on_game_end callback from _end_game_received")
             self.on_game_end(winner)
-            WinScreen(f"Player {winner}")
-            print("verif 6")
-        
-        print("verif 7")
+        else:
+            print("[DEBUG] No on_game_end callback defined in _end_game_received")
+
+        WinScreen(f"Player {winner}")
     
     def _basic_validate_move(self, from_pos, to_pos):#get move validation in message when NetworkGameLogic is not working correctly
         if not self.moves_rules or not self.board:
