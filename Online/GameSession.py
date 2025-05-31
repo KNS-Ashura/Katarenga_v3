@@ -110,6 +110,8 @@ class GameSession:
             winner = self.game_logic.check_victory(self.board, self.game_type, self.current_player)
             if winner:
                 print(f"[DEBUG] Victory detected for Player {winner}")
+                # Afficher WinScreen("Player 1") quel que soit le gagnant
+                self.close_all_and_show_win_screen("Player 1")
                 self._end_game(winner)
             else:
                 self._switch_player()
@@ -165,6 +167,8 @@ class GameSession:
                     )
                 if winner:
                     print(f"[DEBUG] Opponent triggered victory: Player {winner}")
+                    # Afficher WinScreen("Player 1") quel que soit le gagnant
+                    self.close_all_and_show_win_screen("Player 1")
                     self._end_game(winner)
                 else:
                     self._switch_player()
@@ -238,11 +242,8 @@ class GameSession:
         if self.on_game_end:
             print("[DEBUG] Calling on_game_end callback")
             self.on_game_end(winner)
-            print("[DEBUG] Calling WinScreen")
         else:
             print("[DEBUG] No on_game_end callback defined")
-
-        
     
     def send_chat_message(self, text):
         message = {
@@ -279,15 +280,21 @@ class GameSession:
         print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
         self.game_finished = True
 
+        # Toujours afficher WinScreen("Player 1") à la fin de la partie
+        self.close_all_and_show_win_screen("Player 1")
+
         if self.on_game_end:
             print("[DEBUG] Calling on_game_end callback from _end_game_received")
             self.on_game_end(winner)
         else:
             print("[DEBUG] No on_game_end callback defined in _end_game_received")
 
-        
+    def close_all_and_show_win_screen(self, winner):
+        print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
+        WinScreen(winner)
     
-    def _basic_validate_move(self, from_pos, to_pos):#get move validation in message when NetworkGameLogic is not working correctly
+    def _basic_validate_move(self, from_pos, to_pos):
+        # get move validation in message when NetworkGameLogic is not working correctly
         if not self.moves_rules or not self.board:
             return False
         
@@ -308,4 +315,3 @@ class GameSession:
             if case_color % 10 != self.current_player:
                 return False
             return self.moves_rules.verify_move(case_color, from_row, from_col, to_row, to_col)
-        
