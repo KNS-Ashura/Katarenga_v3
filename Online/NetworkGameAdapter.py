@@ -246,19 +246,21 @@ class NetworkGameAdapter(BaseUI):
             self._trigger_victory(winner)
     
     def _trigger_victory(self, winner):
+        print(" coucou ")
         
         self.game_finished = True
 
         # Déterminer le nom du gagnant
         if winner == self.local_player:
-            winner_name = f"Player {self.local_player} (You)"
+            winner_name = winner
             self.set_status("You win!", (100, 255, 100))
         else:
-            winner_name = f"Player {winner} (Opponent)"
+            winner_name = winner
             self.set_status("You lose!", (255, 100, 100))
         
         # Afficher l'écran de victoire après avoir défini le nom
-        self.win_screen = WinScreen(winner_name)
+        WinScreen(winner_name)
+
             
         
 

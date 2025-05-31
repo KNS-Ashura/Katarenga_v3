@@ -239,7 +239,6 @@ class GameSession:
             print("[DEBUG] Calling on_game_end callback")
             self.on_game_end(winner)
             print("[DEBUG] Calling WinScreen")
-            self.show_win_screen(winner)
         else:
             print("[DEBUG] No on_game_end callback defined")
 
@@ -283,7 +282,6 @@ class GameSession:
         if self.on_game_end:
             print("[DEBUG] Calling on_game_end callback from _end_game_received")
             self.on_game_end(winner)
-            self.show_win_screen(winner)
         else:
             print("[DEBUG] No on_game_end callback defined in _end_game_received")
 
@@ -311,6 +309,3 @@ class GameSession:
                 return False
             return self.moves_rules.verify_move(case_color, from_row, from_col, to_row, to_col)
         
-    def show_win_screen(winner):
-        # Appelé dans le thread principal = pas de crash
-        WinScreen(f"Player {winner}")
