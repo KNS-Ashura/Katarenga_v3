@@ -129,7 +129,6 @@ class MainMenuUI(BaseUI):
             print(f"Error launching selector: {e}")
 
     def launch_editor_menu(self):
-        """✅ Launch board editor menu in integrated mode"""
         try:
             editor = EditorMenu()
             while editor.running and self.running:
@@ -152,7 +151,6 @@ class MainMenuUI(BaseUI):
             print(f"Error launching editor: {e}")
 
     def launch_host_interface(self):
-        """✅ Launch host interface in integrated mode"""
         try:
             host_interface = HostUI()
             while host_interface.running and self.running:
@@ -176,7 +174,6 @@ class MainMenuUI(BaseUI):
             print(f"Error launching host interface: {e}")
 
     def launch_join_interface(self):
-        """✅ Launch join interface in integrated mode"""
         try:
             join_interface = JoinUI()
             while join_interface.running and self.running:

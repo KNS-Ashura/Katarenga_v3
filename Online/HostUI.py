@@ -197,7 +197,6 @@ class HostUI(BaseUI):
         return new_board
     
     def _place_pawns_congress(self, board):
-        """Place pawns for Congress on 8x8 board"""
         new_board = copy.deepcopy(board)
         grid_dim = len(new_board)  # Should be 8 for Congress
         

@@ -171,7 +171,7 @@ class SquareSelectorUi(BaseUI):
             if self.is_board_filled():
                 if self.network_mode:
                     # Network mode: just confirm and exit UI
-                    print("[NETWORK] Board selection completed for network game")
+                    #print("[NETWORK] Board selection completed for network game")
                     self.running = False
                     return
                 else:

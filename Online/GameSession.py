@@ -1,4 +1,3 @@
-# Online/GameSession.py
 from UI_tools.win_screen import WinScreen
 import json
 import copy
@@ -8,7 +7,7 @@ from Online.NetworkGameLogic import NetworkGameLogic
 try:
     NETWORK_LOGIC_AVAILABLE = True
 except ImportError:
-    print("NetworkGameLogic not found, using basic validation only")
+    #print("NetworkGameLogic not found, using basic validation only")
     NETWORK_LOGIC_AVAILABLE = False
 
 class GameSession:
@@ -77,20 +76,20 @@ class GameSession:
         if self.on_player_change:
             self.on_player_change(self.current_player)
         
-        print(f"Game started - Type: {self.game_type}")
+        #print(f"Game started - Type: {self.game_type}")
         return True
     
     def make_move(self, from_pos, to_pos):
         if not self.game_started or self.game_finished:
-            print("[DEBUG] Move rejected: game not started or already finished.")
+            #print("[DEBUG] Move rejected: game not started or already finished.")
             return False
 
         local_player = 1 if self.is_host else 2
         if self.current_player != local_player:
-            print("[DEBUG] Not your turn.")
+            #print("[DEBUG] Not your turn.")
             return False
 
-        print(f"[DEBUG] Attempting move: {from_pos} -> {to_pos} by Player {self.current_player}")
+        #print(f"[DEBUG] Attempting move: {from_pos} -> {to_pos} by Player {self.current_player}")
 
         if self.game_logic and self.game_logic.validate_move(
             self.board, self.moves_rules, self.game_type,
@@ -104,12 +103,12 @@ class GameSession:
                 'to': to_pos,
                 'player': self.current_player
             }
-            print(f"[DEBUG] Sending MOVE to opponent: {message}")
+            #print(f"[DEBUG] Sending MOVE to opponent: {message}")
             self.network.send_message(json.dumps(message))
 
             winner = self.game_logic.check_victory(self.board, self.game_type, self.current_player)
             if winner:
-                print(f"[DEBUG] Victory detected for Player {winner}")
+                #print(f"[DEBUG] Victory detected for Player {winner}")
                 self._end_game(winner)
             else:
                 self._switch_player()
@@ -129,14 +128,14 @@ class GameSession:
             self._switch_player()
             return True
 
-        print("[DEBUG] Invalid move.")
+        #print("[DEBUG] Invalid move.")
         return False
     
     def _handle_network_message(self, message):
         try:
             data = json.loads(message)
             msg_type = data.get('type')
-            print(f"[DEBUG] Received message: {msg_type} | Data: {data}")
+            #print(f"[DEBUG] Received message: {msg_type} | Data: {data}")
 
             if msg_type == 'BOARD_DATA':
                 self.board = data['board']
@@ -155,7 +154,7 @@ class GameSession:
                 from_pos = tuple(data['from']) if data['from'] else None
                 to_pos = tuple(data['to'])
                 player = data['player']
-                print(f"[DEBUG] Applying opponent move: {from_pos} -> {to_pos}")
+                #print(f"[DEBUG] Applying opponent move: {from_pos} -> {to_pos}")
 
                 self._apply_move(from_pos, to_pos)
 
@@ -165,7 +164,7 @@ class GameSession:
                         self.board, self.game_type, self.current_player
                     )
                 if winner:
-                    print(f"[DEBUG] Opponent triggered victory: Player {winner}")
+                    #print(f"[DEBUG] Opponent triggered victory: Player {winner}")
                     # Appeler _end_game pour que WinScreen soit affiché aussi côté client
                     self._end_game(winner)
                 else:
@@ -173,11 +172,11 @@ class GameSession:
 
             elif msg_type == 'GAME_END':
                 winner = data['winner']
-                print(f"[DEBUG] GAME_END received from opponent - Winner: Player {winner}")
+                #print(f"[DEBUG] GAME_END received from opponent - Winner: Player {winner}")
                 self._end_game_received(winner)
 
         except Exception as e:
-            print(f"[ERROR] Error processing message: {e}")
+            print(f"Error processing message: {e}")
     
     def _handle_disconnect(self):
         if not self.game_finished:
@@ -227,40 +226,40 @@ class GameSession:
             self.on_player_change(self.current_player)
     
     def _end_game(self, winner):
-        print(f"[DEBUG] _end_game called - Winner: Player {winner}")
+        #print(f"[DEBUG] _end_game called - Winner: Player {winner}")
         self.game_finished = True
 
         message = {
             'type': 'GAME_END',
             'winner': winner
         }
-        print("[DEBUG] Sending GAME_END message to opponent")
+        #print("[DEBUG] Sending GAME_END message to opponent")
         self.network.send_message(json.dumps(message))
 
         if self.on_game_end:
-            print("[DEBUG] Calling on_game_end callback")
+            #print("[DEBUG] Calling on_game_end callback")
             self.on_game_end(winner)
         else:
-            print("[DEBUG] No on_game_end callback defined")
-
+            #print("[DEBUG] No on_game_end callback defined")
+            pass
         # Affiche la WinScreen quel que soit le joueur
         self.close_all_and_show_win_screen(f"Player {winner}")
     
     def _end_game_received(self, winner):
-        print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
+        #print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
         self.game_finished = True
 
         if self.on_game_end:
-            print("[DEBUG] Calling on_game_end callback from _end_game_received")
+            #print("[DEBUG] Calling on_game_end callback from _end_game_received")
             self.on_game_end(winner)
         else:
-            print("[DEBUG] No on_game_end callback defined in _end_game_received")
-
+            #print("[DEBUG] No on_game_end callback defined in _end_game_received")
+            pass
         # Affiche WinScreen côté client à la réception de GAME_END
         self.close_all_and_show_win_screen(f"Player {winner}")
     
     def close_all_and_show_win_screen(self, winner):
-        print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
+        #print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
         WinScreen(winner)
     
     def send_chat_message(self, text):

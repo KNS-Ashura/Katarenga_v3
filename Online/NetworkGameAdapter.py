@@ -1,4 +1,5 @@
 import pygame
+import copy
 from UI_tools.BaseUi import BaseUI
 from Board.Board_draw_tools import Board_draw_tools
 from Game_ui.move_rules import Moves_rules
@@ -57,14 +58,12 @@ class NetworkGameAdapter(BaseUI):
             raise ValueError(f"Unknown game type: {self.game_type}")
     
     def _handle_local_victory(self, winner):
-        """Callback appelé par Congress quand une victoire est détectée localement"""
-        print(f"Victory callback received: Player {winner}")
+        #print(f"Victory callback received: Player {winner}")
         # Déclencher immédiatement l'affichage de victoire
         self._trigger_victory(winner)
     
     def _extract_base_board(self, board_with_pawns):
-        """Extrait le plateau de base (sans pions) à partir du plateau avec pions"""
-        import copy
+        
         base_board = copy.deepcopy(board_with_pawns)
         
         for i in range(len(base_board)):
@@ -225,7 +224,7 @@ class NetworkGameAdapter(BaseUI):
         if self.game_type in [1, 3]:
             self._check_local_victory()
         
-        print("Board updated")
+        #print("Board updated")
     
     def _check_local_victory(self):
         
@@ -246,7 +245,7 @@ class NetworkGameAdapter(BaseUI):
             self._trigger_victory(winner)
     
     def _trigger_victory(self, winner):
-        print(" coucou ")
+        
         
         self.game_finished = True
 
@@ -269,10 +268,9 @@ class NetworkGameAdapter(BaseUI):
             try:
                 self.session._end_game(winner)
             except Exception as e:
-                print(f"Error sending victory to network: {e}")
-
+                #print(f"Error sending victory to network: {e}")
+                pass
     def _check_katarenga_victory(self):
-        """Vérification de victoire pour Katarenga"""
         player1_count = 0
         player2_count = 0
         
@@ -303,7 +301,6 @@ class NetworkGameAdapter(BaseUI):
         return None
     
     def _check_isolation_victory(self):
-        """Vérification de victoire pour Isolation"""
         # Compter les mouvements total
         total_moves = 0
         for row in range(len(self.board)):
@@ -325,7 +322,6 @@ class NetworkGameAdapter(BaseUI):
         return None
     
     def _can_play_isolation(self, current_player):
-        """Vérifie si le joueur peut encore jouer en Isolation"""
         for i in range(len(self.board)):
             for j in range(len(self.board[0])):
                 case = self.board[i][j]
@@ -339,7 +335,6 @@ class NetworkGameAdapter(BaseUI):
         return False
     
     def _is_square_under_attack(self, x, y):
-        """Vérifie si une case est sous attaque"""
         for i in range(len(self.board)):
             for j in range(len(self.board[0])):
                 case = self.board[i][j]

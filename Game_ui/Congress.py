@@ -204,7 +204,7 @@ class Congress(BaseUI):
 
     def trigger_victory_local(self, winner):
         
-        print(f"Local victory triggered: Player {winner} wins!")
+        #print(f"Local victory triggered: Player {winner} wins!")
         self.running = False
         
         try:

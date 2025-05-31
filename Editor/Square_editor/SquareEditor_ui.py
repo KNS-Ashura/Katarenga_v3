@@ -114,7 +114,7 @@ class SquareEditorUi(BaseUI):
             # Cycle color code (1 to 4)
             new_color_code = (color_code % 4) + 1
             self.square[row][col] = new_color_code * 10 + (value % 10)
-            print(f"Updated board: {self.square}")
+            #print(f"Updated board: {self.square}")
 
         # Activate text input if clicked inside input box
         if self.text_input_rect.collidepoint(x, y):
