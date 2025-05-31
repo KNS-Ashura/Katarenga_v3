@@ -62,20 +62,20 @@ class NetworkGameLogic:
         case_color = board[from_row][from_col]
         if case_color % 10 != current_player:
             return False
-        
-       
-        # Player 1 can move from row 8 (cols 1-8) to victory corners (9,0) or (9,9)
-        if (current_player == 1 and from_row == 8 and 1 <= from_col <= 8 
-            and (to_row, to_col) in [(9, 0), (9, 9)]):
-            return True
-        
-        # Player 2 can move from row 1 (cols 1-8) to victory corners (0,0) or (0,9)  
-        if (current_player == 2 and from_row == 1 and 1 <= from_col <= 8
+
+        # Correction : victoire Joueur 1 = depuis ligne 1 vers (0,0) ou (0,9)
+        if (current_player == 1 and from_row == 1 and 1 <= from_col <= 8 
             and (to_row, to_col) in [(0, 0), (0, 9)]):
+            return True
+
+        # Correction : victoire Joueur 2 = depuis ligne 8 vers (9,0) ou (9,9)
+        if (current_player == 2 and from_row == 8 and 1 <= from_col <= 8
+            and (to_row, to_col) in [(9, 0), (9, 9)]):
             return True
         
         # Use existing movement rules for normal moves
         return moves_rules.verify_move(case_color, from_row, from_col, to_row, to_col)
+
     
     def _validate_congress_move(self, board, moves_rules, current_player, from_pos, to_pos):
         
@@ -130,12 +130,12 @@ class NetworkGameLogic:
         # Victory by corner occupation 
         if len(board) >= 10 and len(board[0]) >= 10:
             # Player 2 wins if occupies both bottom corners
-            if board[9][0] % 10 == 1 and board[9][9] % 10 == 1:
-                return 1
+            if board[9][0] % 10 == 2 and board[9][9] % 10 == 2:
+                return 2
             
             # Player 1 wins if occupies both top corners  
-            if board[0][0] % 10 == 2 and board[0][9] % 10 == 2:
-                return 2
+            if board[0][0] % 10 == 1 and board[0][9] % 10 == 1:
+                return 1
         
         return None
     
