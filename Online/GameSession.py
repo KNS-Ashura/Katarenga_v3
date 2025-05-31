@@ -238,11 +238,12 @@ class GameSession:
         if self.on_game_end:
             print("[DEBUG] Calling on_game_end callback")
             self.on_game_end(winner)
+            print("[DEBUG] Calling WinScreen")
+            self.show_win_screen(winner)
         else:
             print("[DEBUG] No on_game_end callback defined")
 
-        print("[DEBUG] Calling WinScreen")
-        self.show_win_screen(winner)
+        
     
     def send_chat_message(self, text):
         message = {
@@ -282,10 +283,11 @@ class GameSession:
         if self.on_game_end:
             print("[DEBUG] Calling on_game_end callback from _end_game_received")
             self.on_game_end(winner)
+            self.show_win_screen(winner)
         else:
             print("[DEBUG] No on_game_end callback defined in _end_game_received")
 
-        self.show_win_screen(winner)
+        
     
     def _basic_validate_move(self, from_pos, to_pos):#get move validation in message when NetworkGameLogic is not working correctly
         if not self.moves_rules or not self.board:
