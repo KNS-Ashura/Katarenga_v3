@@ -1,4 +1,4 @@
-import pygame
+import pygame 
 import copy
 from collections import deque
 import random
@@ -47,9 +47,9 @@ class Congress(BaseUI):
 
         self.__ai = ai  # AI player flag or instance
         
-        # Flags pour la gestion de la victoire
+        # Flags for victory handling
         self.network_mode = False
-        self.victory_callback = None  # Callback pour le mode réseau
+        self.victory_callback = None  # Callback for network mode
 
     def place_pawn_congress(self, base_board):
         new_board = copy.deepcopy(base_board)
@@ -77,7 +77,7 @@ class Congress(BaseUI):
         self.victory_callback = victory_callback
 
     def run(self):
-        #Main game loop: handles events, draws UI, updates display, and runs AI if active.
+        # Main game loop: handles events, draws UI, updates display, and runs AI if active.
         while self.running:
             self.handle_events()
             self.draw()
@@ -89,7 +89,7 @@ class Congress(BaseUI):
                 self.congress_ai()
 
     def handle_events(self):
-        #Event handler for quitting, back button, and board clicks.
+        # Event handler for quitting, back button, and board clicks.
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
                 self.running = False
@@ -100,7 +100,7 @@ class Congress(BaseUI):
                     self.handle_board_click(event.pos)
 
     def handle_board_click(self, pos):
-        #Handles clicks inside the board grid, converting pixel to grid coordinates.
+        # Handles clicks inside the board grid, converting pixel to grid coordinates.
         x, y = pos
         if (self.left_offset <= x < self.left_offset + self.grid_size and
             self.top_offset <= y < self.top_offset + self.grid_size):
@@ -134,37 +134,36 @@ class Congress(BaseUI):
                     self.make_move(sel_r, sel_c, row, col)
                     self.selected_pawn = None
                     
-                    # Toujours vérifier la victoire après un mouvement
+                    # Always check for victory after a move
                     self.check_and_handle_victory()
                     
-                    # Si pas de victoire, changer de joueur
-                    if self.running:  # Le jeu continue
+                    # If no victory, switch player
+                    if self.running:  # Game is still running
                         self.switch_player()
                 else:
                     print("Invalid move or square occupied")
 
     def check_and_handle_victory(self):
-        
         winner = self.check_all_players_victory()
         if winner:
             if self.network_mode:
-                # Mode réseau : notifier via callback sans afficher WinScreen
+                # Network mode: notify via callback without displaying WinScreen
                 print(f"Victory detected in network mode: Player {winner}")
                 if self.victory_callback:
                     self.victory_callback(winner)
-                # Le jeu continue, NetworkGameAdapter gère l'affichage
+                # Game continues, NetworkGameAdapter handles display
             else:
-                # Mode local : afficher WinScreen et arrêter le jeu
+                # Local mode: display WinScreen and stop the game
                 print(f"Victory detected in local mode: Player {winner}")
                 self.trigger_victory_local(winner)
 
     def is_valid_move(self, fr, fc, tr, tc):
-        #Checks if move is valid by delegating to move rules verifier.
+        # Checks if move is valid by delegating to move rules verifier.
         case_color = self.board[fr][fc]
         return self.moves_rules.verify_move(case_color, fr, fc, tr, tc)
 
     def make_move(self, fr, fc, tr, tc):
-        #Executes move on board: clears origin cell, places pawn on target cell.
+        # Executes move on board: clears origin cell, places pawn on target cell.
         dest_color = self.base_board[tr][tc] // 10
         orig_color = self.base_board[fr][fc] // 10
         self.board[fr][fc] = orig_color * 10  # Clear origin cell
@@ -172,12 +171,11 @@ class Congress(BaseUI):
         print(f"Moved from ({fr}, {fc}) to ({tr}, {tc})")
 
     def switch_player(self):
-        #Switch current player between 1 and 2.
+        # Switch current player between 1 and 2.
         self.current_player = 2 if self.current_player == 1 else 1
         print(f"Player {self.current_player}'s turn")
 
     def check_victory(self, player):
-        
         positions = [(i, j) for i in range(self.grid_dim) for j in range(self.grid_dim)
                      if self.board[i][j] % 10 == player]
         if not positions:
@@ -196,19 +194,17 @@ class Congress(BaseUI):
         return len(visited) == len(positions)
 
     def check_all_players_victory(self):
-        
         for player in [1, 2]:
             if self.check_victory(player):
                 return player
         return None
 
     def trigger_victory_local(self, winner):
-        
-        #print(f"Local victory triggered: Player {winner} wins!")
+        # print(f"Local victory triggered: Player {winner} wins!")
         self.running = False
         
         try:
-            # Afficher l'écran de victoire avec le nom approprié
+            # Display the win screen with the appropriate name
             if winner == 1:
                 WinScreen("Player 1")
             elif winner == 2:
@@ -220,7 +216,7 @@ class Congress(BaseUI):
             print(f"Error showing win screen: {e}")
 
     def draw(self):
-        #Draw the full game screen: background, board grid, pawns, UI elements.
+        # Draw the full game screen: background, board grid, pawns, UI elements.
         screen = self.get_screen()
 
         # Draw background
@@ -244,45 +240,4 @@ class Congress(BaseUI):
                 pygame.draw.rect(screen, color, rect)
                 pygame.draw.rect(screen, (255, 255, 255), rect, 1)
 
-                # Highlight selected pawn
-                if self.selected_pawn == (row, col):
-                    pygame.draw.rect(screen, (255, 255, 0), rect, 4)
-
-                # Draw pawn if present
-                cell_val = self.board[row][col]
-                owner = cell_val % 10
-                if owner != 0:
-                    pawn_color = (0, 0, 0) if owner == 2 else (255, 255, 255)
-                    center = rect.center
-                    pygame.draw.circle(screen, pawn_color, center, self.cell_size // 3)
-
-        # Draw back button
-        pygame.draw.rect(screen, (180, 180, 180), self.back_button_rect)
-        back_text = self.info_font.render("Back", True, (0, 0, 0))
-        back_rect = back_text.get_rect(center=self.back_button_rect.center)
-        screen.blit(back_text, back_rect)
-
-        # Draw current player info
-        player_text = self.info_font.render(f"Player {self.current_player}'s turn", True, (255, 255, 255))
-        screen.blit(player_text, (20, self.get_height() - 50))
-
-    def congress_ai(self):
-        #Simple AI for player 2: randomly selects a pawn and attempts random valid moves.
-        pawns = [(r, c) for r in range(self.grid_dim) for c in range(self.grid_dim)
-                 if self.board[r][c] % 10 == 2]
-
-        random.shuffle(pawns)
-        for r, c in pawns:
-            for dr, dc in [(1,0), (-1,0), (0,1), (0,-1)]:
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < self.grid_dim and 0 <= nc < self.grid_dim:
-                    if self.board[nr][nc] % 10 == 0 and self.is_valid_move(r, c, nr, nc):
-                        self.make_move(r, c, nr, nc)
-                        
-                        # Toujours vérifier la victoire après un mouvement de l'IA
-                        self.check_and_handle_victory()
-                        
-                        # Si pas de victoire, changer de joueur
-                        if self.running:  # Le jeu continue
-                            self.switch_player()
-                        return
+                # Highlight selected...
