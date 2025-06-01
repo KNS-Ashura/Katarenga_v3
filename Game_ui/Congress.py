@@ -1,7 +1,6 @@
 import pygame 
 import copy
 from collections import deque
-import random
 
 from UI_tools.BaseUi import BaseUI
 from Board.Board_draw_tools import Board_draw_tools
