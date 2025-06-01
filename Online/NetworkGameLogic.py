@@ -41,7 +41,7 @@ class NetworkGameLogic:
             return False
         
         # Check square is not "en prise" = under attack
-        if self._is_square_under_attack(board, moves_rules, to_row, to_col):
+        if self.is_square_under_attack(board, moves_rules, to_row, to_col):  # CORRECTION: utiliser la méthode existante
             return False
         
         return True
@@ -99,7 +99,6 @@ class NetworkGameLogic:
     def check_victory(self, board, game_type, current_player):
         
         if game_type == 1:  # Katarenga
-            print("verif 1")
             return self._check_katarenga_victory(board)
         elif game_type == 2:  # Congress
             return self._check_congress_victory(board)
@@ -136,7 +135,6 @@ class NetworkGameLogic:
             
             # Player 1 wins if occupies both top corners  
             if board[0][0] % 10 == 1 and board[0][9] % 10 == 1:
-                print("verif 2")
                 return 1
         
         return None
