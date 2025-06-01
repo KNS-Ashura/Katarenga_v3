@@ -1,9 +1,10 @@
 import pygame
 from UI_tools.BaseUi import BaseUI
 from Online.NetworkManager import NetworkManager
+from Online.NetworkGameAdapter import NetworkGameAdapter
 from Online.GameSession import GameSession
 from Editor.Square_selector.SquareSelectorUi import SquareSelectorUi
-from Online.NetworkGameAdapter import NetworkGameAdapter
+
 import copy
 import time
 class HostUI(BaseUI):

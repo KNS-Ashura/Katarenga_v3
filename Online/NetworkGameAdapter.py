@@ -1,316 +1,423 @@
-from UI_tools.win_screen import WinScreen
-import json
+import pygame
 import copy
+from UI_tools.BaseUi import BaseUI
+from Board.Board_draw_tools import Board_draw_tools
 from Game_ui.move_rules import Moves_rules
-from Online.NetworkGameLogic import NetworkGameLogic
+from UI_tools.win_screen import WinScreen
 
-try:
-    NETWORK_LOGIC_AVAILABLE = True
-except ImportError:
-    #print("NetworkGameLogic not found, using basic validation only")
-    NETWORK_LOGIC_AVAILABLE = False
+from Game_ui.Katarenga import Katarenga
+from Game_ui.Congress import Congress
+from Game_ui.Isolation import Isolation
 
-class GameSession:
+class NetworkGameAdapter(BaseUI):
     
-    def __init__(self, game_type, network_manager):
-        self.game_type = game_type  # 1=Katarenga, 2=Congress, 3=Isolation
-        self.network = network_manager
-        self.board = None
+    def __init__(self, game_session, title="Network Game"):
+        super().__init__(title)
+        
+        # Network game session
+        self.session = game_session
+        self.board = game_session.board
+        self.game_type = game_session.game_type
+        self.local_player = 1 if game_session.is_host else 2
+        
+        # Create an instance of the game to reuse its methods
+        self.game_instance = self._create_game_instance()
+        
+        # Network game state
+        self.selected_pawn = None
         self.current_player = 1
-        self.is_host = network_manager.is_host
-        self.game_started = False
         self.game_finished = False
+        self.status_message = ""
+        self.status_color = (255, 255, 255)
         
-        # Movement rules
-        self.moves_rules = None
-        
-        # Game logic handler
-        if NETWORK_LOGIC_AVAILABLE:
-            self.game_logic = NetworkGameLogic()
-        else:
-            self.game_logic = None
-        
-        # Callbacks for game events
-        self.on_board_update = None
-        self.on_player_change = None
-        self.on_game_end = None
-        
-        self.network.set_callbacks(
-            message_callback=self._handle_network_message,
-            disconnect_callback=self._handle_disconnect
+        # Set up callbacks
+        self.session.set_game_callbacks(
+            board_update=self.on_board_update,
+            player_change=self.on_player_change,
+            game_end=self.on_game_end
         )
     
-    def set_game_callbacks(self, board_update=None, player_change=None, game_end=None):
-        self.on_board_update = board_update
-        self.on_player_change = player_change
-        self.on_game_end = game_end
-    
-    def set_board(self, board_data):
-        self.board = copy.deepcopy(board_data)
-        # Initialize movement rules with new board
-        self.moves_rules = Moves_rules(self.board)
+    def _create_game_instance(self):
+        ai_disabled = False
         
-        if self.is_host:
-            # Send board data to client
-            message = {
-                'type': 'BOARD_DATA',
-                'board': self.board,
-                'game_type': self.game_type
-            }
-            self.network.send_message(json.dumps(message))
+        if self.game_type == 1:
+            return Katarenga(ai_disabled, self.board)
+        elif self.game_type == 2:
+            # Pour Congress, on utilise le fichier original mais on configure le mode réseau
+            congress_instance = Congress(ai_disabled, self.board)
+            # Remplacer le plateau généré par celui du réseau
+            congress_instance.board = self.board
+            congress_instance.base_board = self._extract_base_board(self.board)
+            # IMPORTANT: Configurer le mode réseau avec callback
+            congress_instance.set_network_mode(True, victory_callback=self._handle_local_victory)
+            return congress_instance
+        elif self.game_type == 3:
+            return Isolation(ai_disabled, self.board)
+        else:
+            raise ValueError(f"Unknown game type: {self.game_type}")
     
-    def start_game(self):
-        if not self.board:
-            return False
+    def _handle_local_victory(self, winner):
+        #print(f"Victory callback received: Player {winner}")
+        # Déclencher immédiatement l'affichage de victoire
+        self._trigger_victory(winner)
+    
+    def _extract_base_board(self, board_with_pawns):
+        base_board = copy.deepcopy(board_with_pawns)
         
-        self.game_started = True
-        self.current_player = 1  # Host always starts
+        for i in range(len(base_board)):
+            for j in range(len(base_board[0])):
+                # Garde seulement la couleur de base (retire les pions)
+                color_code = base_board[i][j] // 10
+                base_board[i][j] = color_code * 10
         
-        if self.is_host:
-            message = {
-                'type': 'GAME_START',
-                'current_player': self.current_player
-            }
-            self.network.send_message(json.dumps(message))
+        return base_board
+    
+    def run(self):
+        self.session.start_game()
         
-        if self.on_player_change:
-            self.on_player_change(self.current_player)
+        while self.running and not self.game_finished:
+            self.handle_events()
+            self.update()
+            self.draw()
+            pygame.display.flip()
+            self.clock.tick(60)
         
-        #print(f"Game started - Type: {self.game_type}")
-        return True
+        # Wait for user to close window after game ends
+        if self.game_finished:
+            waiting_for_close = True
+            while waiting_for_close:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                        waiting_for_close = False
+                
+                # Continue drawing the end screen
+                self.draw()
+                pygame.display.flip()
+                self.clock.tick(60)
     
-    def make_move(self, from_pos, to_pos):
-        if not self.game_started or self.game_finished:
-            #print("[DEBUG] Move rejected: game not started or already finished.")
-            return False
-
-        local_player = 1 if self.is_host else 2
-        if self.current_player != local_player:
-            #print("[DEBUG] Not your turn.")
-            return False
-
-        #print(f"[DEBUG] Attempting move: {from_pos} -> {to_pos} by Player {self.current_player}")
-
-        if self.game_logic and self.game_logic.validate_move(
-            self.board, self.moves_rules, self.game_type,
-            self.current_player, from_pos, to_pos
-        ):
-            self._apply_move(from_pos, to_pos)
-
-            message = {
-                'type': 'MOVE',
-                'from': from_pos,
-                'to': to_pos,
-                'player': self.current_player
-            }
-            #print(f"[DEBUG] Sending MOVE to opponent: {message}")
-            self.network.send_message(json.dumps(message))
-
-            # CORRECTION: Vérifier la victoire APRÈS avoir appliqué le mouvement
-            winner = self.game_logic.check_victory(self.board, self.game_type, self.current_player)
-            if winner:
-                #print(f"[DEBUG] Victory detected for Player {winner}")
-                self._end_game(winner)
-            else:
-                self._switch_player()
-
-            return True
-
-        elif not self.game_logic and self._basic_validate_move(from_pos, to_pos):
-            self._apply_move(from_pos, to_pos)
-
-            message = {
-                'type': 'MOVE',
-                'from': from_pos,
-                'to': to_pos,
-                'player': self.current_player
-            }
-            self.network.send_message(json.dumps(message))
-            self._switch_player()
-            return True
-
-        #print("[DEBUG] Invalid move.")
-        return False
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                self.running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self.handle_click(event.pos)
     
-    def _handle_network_message(self, message):
-        try:
-            data = json.loads(message)
-            msg_type = data.get('type')
-            #print(f"[DEBUG] Received message: {msg_type} | Data: {data}")
-
-            if msg_type == 'BOARD_DATA':
-                self.board = data['board']
-                self.game_type = data['game_type']
-                self.moves_rules = Moves_rules(self.board)
-                if self.on_board_update:
-                    self.on_board_update(self.board)
-
-            elif msg_type == 'GAME_START':
-                self.game_started = True
-                self.current_player = data['current_player']
-                if self.on_player_change:
-                    self.on_player_change(self.current_player)
-
-            elif msg_type == 'MOVE':
-                from_pos = tuple(data['from']) if data['from'] else None
-                to_pos = tuple(data['to'])
-                player = data['player']
-                #print(f"[DEBUG] Applying opponent move: {from_pos} -> {to_pos}")
-
-                self._apply_move(from_pos, to_pos)
-
-                # CORRECTION: Vérifier la victoire APRÈS avoir appliqué le mouvement de l'adversaire
-                winner = None
-                if self.game_logic:
-                    winner = self.game_logic.check_victory(
-                        self.board, self.game_type, self.current_player
-                    )
-                if winner:
-                    #print(f"[DEBUG] Opponent triggered victory: Player {winner}")
-                    # Appeler _end_game pour que WinScreen soit affiché aussi côté client
-                    self._end_game(winner)
-                else:
-                    self._switch_player()
-
-            elif msg_type == 'GAME_END':
-                winner = data['winner']
-                #print(f"[DEBUG] GAME_END received from opponent - Winner: Player {winner}")
-                self._end_game_received(winner)
-
-        except Exception as e:
-            print(f"Error processing message: {e}")
-    
-    def _handle_disconnect(self):
-        if not self.game_finished:
-            self._end_game("Disconnection")
-    
-    def _apply_move(self, from_pos, to_pos):
-        if not self.board:
+    def handle_click(self, pos):
+        # Check if clicking back button FIRST (should work regardless of turn)
+        back_rect = pygame.Rect(20, 20, 120, 40)
+        if back_rect.collidepoint(pos):
+            self.running = False
+            return
+            
+        # Check if clicking back button (if game instance has one)
+        if hasattr(self.game_instance, 'back_button_rect'):
+            if self.game_instance.back_button_rect.collidepoint(pos):
+                self.running = False
+                return
+        
+        # Check if it's the player's turn for game moves
+        if self.current_player != self.local_player:
+            self.set_status("It's not your turn", (255, 255, 100))
             return
         
-        to_row, to_col = to_pos
-        
-        if self.game_type == 3:  # Isolation
-            # For Isolation, just place the piece
-            dest_color = self.board[to_row][to_col] // 10
-            self.board[to_row][to_col] = dest_color * 10 + self.current_player
-        
-        else:  # Katarenga and Congress
-            if from_pos is None:
-                print("Error : from is None")
-                return
-            
-            from_row, from_col = from_pos
-            
-            # Verify source has correct player piece
-            piece = self.board[from_row][from_col]
-            if piece % 10 != self.current_player:
-                return
-            
-            # Clear source square
-            source_color = piece // 10
-            self.board[from_row][from_col] = source_color * 10
-            
-            # Place piece at destination
-            dest_color = self.board[to_row][to_col] // 10
-            self.board[to_row][to_col] = dest_color * 10 + self.current_player
-        
-        # Update move rules with new board state
-        if self.moves_rules:
-            self.moves_rules._Moves_rules__board = self.board
-        
-        if self.on_board_update:
-            self.on_board_update(self.board)
+        # Handle game-specific clicks
+        if self.game_type in [1, 2]:  # Katarenga and Congress
+            self._handle_board_click_katarenga_congress(pos)
+        elif self.game_type == 3:  # Isolation
+            self._handle_click_isolation(pos)
     
-    def _switch_player(self):
-        self.current_player = 2 if self.current_player == 1 else 1
-        if self.on_player_change:
-            self.on_player_change(self.current_player)
+    def _handle_board_click_katarenga_congress(self, pos):
+        row, col = self._get_board_position(pos)
+        if row is None or col is None:
+            return
+        
+        cell_value = self.board[row][col]
+        player_on_cell = cell_value % 10
+        
+        if self.selected_pawn is None:
+            # Selection for pawns but only selecting own pawns
+            if player_on_cell == self.local_player:
+                self.selected_pawn = (row, col)
+                self.set_status(f"Pawn selected at ({row}, {col})", (100, 255, 100))
+            elif player_on_cell != 0:
+                self.set_status("That's not your pawn!", (255, 100, 100))
+            else:
+                self.set_status("Select one of your pawns", (255, 255, 100))
+        else:
+            # Movement or deselection
+            if (row, col) == self.selected_pawn:
+                self.selected_pawn = None
+                self.set_status("Pawn deselected", (200, 200, 200))
+            elif player_on_cell == self.local_player:
+                # Switch to different own pawn
+                self.selected_pawn = (row, col)
+                self.set_status(f"New pawn selected at ({row}, {col})", (100, 255, 100))
+            else:
+                # Try to move to this position
+                from_row, from_col = self.selected_pawn
+                
+                # check if its my own pawn
+                if self.board[from_row][from_col] % 10 != self.local_player:
+                    self.set_status("Error: Not your pawn!", (255, 100, 100))
+                    self.selected_pawn = None
+                    return
+                
+                # Attempt to make move through network
+                if self.session.make_move((from_row, from_col), (row, col)):
+                    self.selected_pawn = None
+                    self.set_status("Move successful", (100, 255, 100))
+                else:
+                    self.set_status("Invalid move", (255, 100, 100))
     
-    def _end_game(self, winner):
-        #print(f"[DEBUG] _end_game called - Winner: Player {winner}")
+    def _handle_click_isolation(self, pos):
+        row, col = self._get_board_position(pos)
+        if row is None or col is None:
+            return
+        
+        # Attempt to place piece through network
+        if self.session.make_move(None, (row, col)):
+            self.set_status("Piece placed", (100, 255, 100))
+            # CORRECTION: NE PAS vérifier la victoire ici - c'est géré par le GameSession
+        else:
+            self.set_status("Invalid placement", (255, 100, 100))
+    
+    def _get_board_position(self, pos):
+        x, y = pos
+        
+        if hasattr(self.game_instance, 'left_offset'):
+            left_offset = self.game_instance.left_offset
+            top_offset = self.game_instance.top_offset
+            cell_size = self.game_instance.cell_size
+            grid_dim = self.game_instance.grid_dim
+        else:
+            # Fallback values
+            left_offset = (self.get_width() - 600) // 2
+            top_offset = 80
+            cell_size = 60
+            grid_dim = len(self.board)
+        
+        if not (left_offset <= x < left_offset + grid_dim * cell_size and
+                top_offset <= y < top_offset + grid_dim * cell_size):
+            return None, None
+        
+        col = (x - left_offset) // cell_size
+        row = (y - top_offset) // cell_size
+        
+        if 0 <= row < grid_dim and 0 <= col < grid_dim:
+            return row, col
+        return None, None
+    
+    def on_board_update(self, new_board):
+        self.board = new_board
+        self.game_instance.board = new_board  # Sync with game instance
+        
+        # Pour Congress, on met aussi à jour le base_board
+        if self.game_type == 2 and hasattr(self.game_instance, 'base_board'):
+            self.game_instance.base_board = self._extract_base_board(new_board)
+        
+        # CORRECTION: Ne plus vérifier la victoire ici - c'est géré par GameSession
+        # Les conditions de victoire sont maintenant gérées de manière centralisée
+        
+        #print("Board updated")
+    
+    def _trigger_victory(self, winner):
         self.game_finished = True
 
-        message = {
-            'type': 'GAME_END',
-            'winner': winner
-        }
-        #print("[DEBUG] Sending GAME_END message to opponent")
-        self.network.send_message(json.dumps(message))
-
-        if self.on_game_end:
-            #print("[DEBUG] Calling on_game_end callback")
-            self.on_game_end(winner)
+        # Déterminer le nom du gagnant
+        if winner == self.local_player:
+            winner_name = f"Player {winner}"
+            self.set_status("You win!", (100, 255, 100))
         else:
-            #print("[DEBUG] No on_game_end callback defined")
-            pass
-        # Affiche la WinScreen quel que soit le joueur
-        self.close_all_and_show_win_screen(f"Player {winner}")
+            winner_name = f"Player {winner}"
+            self.set_status("You lose!", (255, 100, 100))
+        
+        # Afficher l'écran de victoire après avoir défini le nom
+        WinScreen(winner_name)
+
+        # Notifier le réseau
+        if hasattr(self.session, '_end_game'):
+            try:
+                self.session._end_game(winner)
+            except Exception as e:
+                #print(f"Error sending victory to network: {e}")
+                pass
     
-    def _end_game_received(self, winner):
-        #print(f"[DEBUG] _end_game_received called - Winner: Player {winner}")
+    def on_player_change(self, new_player):
+        self.current_player = new_player
+        if new_player == self.local_player:
+            self.set_status("Your turn", (100, 255, 100))
+        else:
+            self.set_status("Opponent's turn", (255, 255, 100))
+    
+    def on_game_end(self, winner):
         self.game_finished = True
-
-        if self.on_game_end:
-            #print("[DEBUG] Calling on_game_end callback from _end_game_received")
-            self.on_game_end(winner)
+        if winner == "Disconnection":
+            self.set_status("Opponent disconnected - Press Escape to quit", (255, 100, 100))
+            if self.local_player == 1:
+                WinScreen("Player 1 (You - Opponent disconnected)")
+            else:
+                WinScreen("Player 2 (You - Opponent disconnected)")
+        elif winner == self.local_player:
+            self.set_status("You win! Press Escape to quit", (100, 255, 100))
+            WinScreen(f"Player {self.local_player} (You)")
         else:
-            #print("[DEBUG] No on_game_end callback defined in _end_game_received")
-            pass
-        # Affiche WinScreen côté client à la réception de GAME_END
-        self.close_all_and_show_win_screen(f"Player {winner}")
+            self.set_status("You lose! Press Escape to quit", (255, 100, 100))
+            WinScreen(f"Player {winner} (Opponent)")
+
+    def set_status(self, message, color):
+        self.status_message = message
+        self.status_color = color
+
+    def update(self):
+        if hasattr(self.game_instance, 'update'):
+            self.game_instance.update()
     
-    def close_all_and_show_win_screen(self, winner):
-        #print(f"[DEBUG] Closing all and showing WinScreen for {winner}")
-        WinScreen(winner)
+    def draw(self):
+        screen = self.get_screen()
+
+        # Si le jeu est terminé, afficher l'écran de victoire
+        if self.game_finished and hasattr(self, 'win_screen'):
+            self.win_screen.draw(screen)
+            return
+
+        # Sinon, afficher normalement le jeu
+        if hasattr(self.game_instance, 'draw'):
+            self._draw_using_game_instance(screen)
+        else:
+            self._draw_basic(screen)
+
+        # Infos réseau
+        self._draw_network_info(screen)
     
-    def send_chat_message(self, text):
-        message = {
-            'type': 'CHAT',
-            'message': f"{'Host' if self.is_host else 'Client'}: {text}"
-        }
-        self.network.send_message(json.dumps(message))
+    def _draw_using_game_instance(self, screen):
+        # Temporarily modify game instance state
+        original_screen = self.game_instance.get_screen()
+        original_selected = getattr(self.game_instance, 'selected_pawn', None)
+        original_current = getattr(self.game_instance, 'current_player', None)
+        
+        # Set values
+        self.game_instance._BaseUI__screen = screen
+        if hasattr(self.game_instance, 'selected_pawn'):
+            self.game_instance.selected_pawn = self.selected_pawn
+        if hasattr(self.game_instance, 'current_player'):
+            self.game_instance.current_player = self.current_player
+        
+        # Draw the game but replace the back button
+        self.game_instance.draw()
+        
+        # Override the back button with network-styled version
+        self._draw_network_back_button(screen)
+        
+        # Restore original values
+        self.game_instance._BaseUI__screen = original_screen
+        if hasattr(self.game_instance, 'selected_pawn'):
+            self.game_instance.selected_pawn = original_selected
+        if hasattr(self.game_instance, 'current_player'):
+            self.game_instance.current_player = original_current
     
-    def get_status(self):
-        return {
-            'game_type': self.game_type,
-            'game_started': self.game_started,
-            'game_finished': self.game_finished,
-            'current_player': self.current_player,
-            'is_host': self.is_host,
-            'local_player': 1 if self.is_host else 2
-        }
+    def _draw_network_back_button(self, screen):
+        # Draw stylish back button like in other interfaces
+        back_rect = pygame.Rect(20, 20, 120, 40)
+        
+        # Draw button background
+        pygame.draw.rect(screen, (70, 70, 70), back_rect)
+        pygame.draw.rect(screen, (255, 255, 255), back_rect, 2)
+        
+        # Draw button text
+        button_font = pygame.font.SysFont(None, 36)
+        back_text = button_font.render("Back", True, (255, 255, 255))
+        text_rect = back_text.get_rect(center=back_rect.center)
+        screen.blit(back_text, text_rect)
+        
+        # Update the back button rect for click detection
+        if hasattr(self.game_instance, 'back_button_rect'):
+            self.game_instance.back_button_rect = back_rect
     
-    def get_game_info(self): #Get game state information
-        if self.board and self.game_logic:
-            return self.game_logic.get_game_state_info(
-                self.board, self.game_type, self.current_player
-            )
+    def _draw_basic(self, screen):
+        screen.fill((30, 30, 30))
+        
+        board_ui = Board_draw_tools()
+        
+        # Draw the board
+        for row in range(len(self.board)):
+            for col in range(len(self.board[0])):
+                rect = pygame.Rect(
+                    col * 60 + 100,
+                    row * 60 + 100,
+                    60, 60
+                )
+                
+                value = self.board[row][col]
+                color = board_ui.get_color_from_board(value // 10)
+                pygame.draw.rect(screen, color, rect)
+                pygame.draw.rect(screen, (255, 255, 255), rect, 1)
+                
+                # Draw pawns with same style as normal games
+                if value % 10 > 0:
+                    center = rect.center
+                    radius = 20
+                    if value % 10 == 1:
+                        pygame.draw.circle(screen, (255, 255, 255), center, radius)
+                        pygame.draw.circle(screen, (0, 0, 0), center, radius, 2)
+                    elif value % 10 == 2:
+                        pygame.draw.circle(screen, (0, 0, 0), center, radius)
+                        pygame.draw.circle(screen, (255, 255, 255), center, radius, 2)
+        
+        # Draw stylish back button
+        self._draw_network_back_button(screen)
+    
+    def _draw_network_info(self, screen):
+        # Create a stylish info panel
+        panel_width = 350
+        panel_height = 120
+        panel_x = self.get_width() - panel_width - 20
+        panel_y = 20
+        
+        # Draw semi-transparent background panel
+        panel_surface = pygame.Surface((panel_width, panel_height))
+        panel_surface.set_alpha(200)
+        panel_surface.fill((40, 40, 40))
+        screen.blit(panel_surface, (panel_x, panel_y))
+        
+        # Draw panel border
+        pygame.draw.rect(screen, (100, 100, 100), (panel_x, panel_y, panel_width, panel_height), 2)
+        
+        # Network Game title
+        title_font = pygame.font.SysFont(None, 32)
+        title_surface = title_font.render("Network Game", True, (255, 255, 255))
+        screen.blit(title_surface, (panel_x + 10, panel_y + 10))
+        
+        # Player information with colored circle
+        info_font = pygame.font.SysFont(None, 28)
+        player_text = f"You are Player {self.local_player}"
+        player_surface = info_font.render(player_text, True, (255, 255, 255))
+        screen.blit(player_surface, (panel_x + 10, panel_y + 45))
+        
+        # Draw player color indicator circle
+        circle_x = panel_x + panel_width - 30
+        circle_y = panel_y + 55
+        if self.local_player == 1:
+            pygame.draw.circle(screen, (255, 255, 255), (circle_x, circle_y), 12)
+            pygame.draw.circle(screen, (0, 0, 0), (circle_x, circle_y), 12, 2)
+        else:
+            pygame.draw.circle(screen, (0, 0, 0), (circle_x, circle_y), 12)
+            pygame.draw.circle(screen, (255, 255, 255), (circle_x, circle_y), 12, 2)
+        
+        # Status message
+        if self.status_message:
+            status_font = pygame.font.SysFont(None, 24)
+            status_surface = status_font.render(self.status_message, True, self.status_color)
+            screen.blit(status_surface, (panel_x + 10, panel_y + 80))
+    
+    def get_game_statistics(self):
+        if self.session.board:
+            return self.session.get_game_info()
         return None
     
     def get_valid_moves(self):
-        if self.board and self.game_logic:
-            return self.game_logic.get_valid_moves(
-                self.board, self.moves_rules, self.game_type, self.current_player
-            )
-        return []
+        return self.session.get_valid_moves()
     
-    def _basic_validate_move(self, from_pos, to_pos): # get move validation if NetworkGameLogic not available
-        if not self.moves_rules or not self.board:
-            return False
-        
-        to_row, to_col = to_pos
-        if not (0 <= to_row < len(self.board) and 0 <= to_col < len(self.board[0])):
-            return False
-        
-        if self.game_type == 3:  # Isolation
-            return from_pos is None and self.board[to_row][to_col] % 10 == 0
-        
-        else:  # Katarenga and Congress
-            if from_pos is None:
-                return False
-            from_row, from_col = from_pos
-            if not (0 <= from_row < len(self.board) and 0 <= from_col < len(self.board[0])):
-                return False
-            case_color = self.board[from_row][from_col]
-            return self.moves_rules.verify_move(case_color, from_row, from_col, to_row, to_col)
+    def can_make_move(self):
+        return (self.current_player == self.local_player and 
+                self.session.game_started and 
+                not self.game_finished)
